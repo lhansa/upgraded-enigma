@@ -1,0 +1,11 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/922595/272441a739944621ab3fcc615c208cf9
+bundleId: https://api.rpubs.com/api/v1/document/922595/272441a739944621ab3fcc615c208cf9
+url: http://rpubs.com/lhansa/922595
+when: 1657464184.54201
+lastSyncTime: 1657464184.54201

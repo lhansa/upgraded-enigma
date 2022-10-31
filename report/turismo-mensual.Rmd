@@ -1,0 +1,179 @@
+---
+title: "Turismo mensual por CC.AA."
+author: "Leonardo Hansa"
+date: "10/07/2022"
+output: html_document
+params:
+  caso: "turismo-por-ccaa"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 12)
+```
+
+Sinceramente, esto es una excusa para probar `arrow`. He encontrado en `datos.gob.es` un CSV con cierto tamaño así que he aprovechado. La fuente, [aquí.](https://datos.gob.es/es/catalogo/ea0010587-numero-de-turistas-pernoctaciones-y-duracion-media-por-ccaa-de-destino-desglosados-por-continente-y-pais-de-residencia-identificador-api-52046)
+
+```{r libs}
+library(dplyr)
+library(arrow)
+library(ggplot2)
+```
+
+## Datos
+
+Quería probar `feather` o `parquet`. He hecho unas pruebas en algún código por ahí y me he decantado por `feather`: he priorizado tiempo sobre espacio. Porque sí.  
+
+```{r checks-totales-feos, echo=FALSE, eval=FALSE}
+read_feather(
+  sprintf("../data/%s.feather", params$caso), 
+  as_data_frame = TRUE
+) %>% 
+  filter(
+    destino == "Madrid, Comunidad de", 
+    periodo == "2022M05", 
+    concepto_turistico == "Pernoctaciones"
+    ) %>% 
+  select(
+    continente_y_pais_de_residencia_nivel_1,
+    continente_y_pais_de_residencia_nivel_2,
+    continente_y_pais_de_residencia_nivel_3,
+    continente_y_pais_de_residencia_nivel_4,
+    total
+  ) %>%
+  filter(
+    is.na(continente_y_pais_de_residencia_nivel_3),
+    is.na(continente_y_pais_de_residencia_nivel_4)
+  ) %>% 
+  View()
+```
+
+
+```{r lectura}
+df_turismo_mes <- read_feather(
+  sprintf("../data/%s.feather", params$caso), 
+  as_data_frame = FALSE
+) %>% 
+  filter(
+    concepto_turistico != "Turistas", 
+    continente_y_pais_de_residencia_nivel_1 == "Total",
+    is.na(continente_y_pais_de_residencia_nivel_2),
+    is.na(continente_y_pais_de_residencia_nivel_3),
+    is.na(continente_y_pais_de_residencia_nivel_4)
+  ) %>%
+  select(destino, periodo, concepto_turistico, total) %>% 
+  mutate(periodo = as.Date(paste0(periodo, "01"), format = "%YM%m%d")) %>% 
+  group_by(destino, periodo, concepto_turistico) %>% 
+  summarise(total = sum(total, na.rm = TRUE), .groups = "drop") %>% 
+  collect()
+```
+
+### Algo de contexto
+
+- Los datos son mensuales, de `r min(df_turismo_mes$periodo)` a `r max(df_turismo_mes$periodo)`.
+- Aparte de las CCAA, están las Ciudades Autónomas y el `Total Nacional`.
+- Primero empiezo con `Pernoctaciones`, pero quizá luego me anime con `Duración media de los viajes`.
+
+## Pernoctaciones
+
+Las únicas CCAA con niveles de pernoctaciones previos a Covid son Madrid y Canarias (Madrid, no, realmente... pero casi, así que hago zoom luego).
+
+```{r wrap-pernoctaciones-ccaa}
+df_turismo_mes %>% 
+  filter(concepto_turistico == "Pernoctaciones") %>% 
+  select(-concepto_turistico) %>% 
+  ggplot() + 
+  geom_line(aes(x = periodo, y = total)) + 
+  facet_wrap(~ destino, scales = "free_y") + 
+  labs(x = "", y = "Pernoctaciones")
+```
+
+
+### Madrid
+
+Total de pernoctaciones en Madrid según continente de origen:
+
+```{r pernoc-madrid}
+calcula_pernoctaciones_por_origen <- function(.destino) {
+  read_feather(
+    sprintf("../data/%s.feather", params$caso), 
+    as_data_frame = FALSE
+  ) %>%
+    filter(
+      concepto_turistico == "Pernoctaciones", 
+      destino == .destino
+    ) %>% 
+    filter(
+      !is.na(continente_y_pais_de_residencia_nivel_2),
+      is.na(continente_y_pais_de_residencia_nivel_3),
+      is.na(continente_y_pais_de_residencia_nivel_4)
+    ) %>% 
+    mutate(
+      periodo = as.Date(paste0(periodo, "01"), format = "%YM%m%d")
+    ) %>% 
+    group_by(origen = continente_y_pais_de_residencia_nivel_2, periodo) %>% 
+    summarise(pernoctaciones = sum(total, na.rm = TRUE), .groups = "drop") %>% 
+    collect()
+}
+
+df_pernoc_madrid <- calcula_pernoctaciones_por_origen("Madrid, Comunidad de")
+
+head(df_pernoc_madrid)
+```
+
+```{r pernoc-madrid-por-cont}
+df_pernoc_madrid %>% 
+  filter(origen != "Total") %>% 
+  group_by(origen) %>% 
+  summarise(pernoctaciones = sum(pernoctaciones)) %>% 
+  mutate(pct_pernoc = pernoctaciones / sum(pernoctaciones), 
+         pct_pernoc = scales::percent(pct_pernoc, decimal.mark = ",")) %>% 
+  arrange(desc(pernoctaciones)) %>% 
+  knitr::kable(col.names = c("Origen", "Pernoctaciones", "%"), format.args = list(big.mark = "."))
+# ggplot(aes(x = reorder(origen, pernoctaciones), y = pernoctaciones)) + 
+# geom_col() + 
+# geom_label(aes(label  = pct_pernoc)) + 
+# labs(x = "", y = "Pernoctaciones") + 
+# coord_flip() 
+```
+
+Los europeos y americanos están ahí, dándolo todo:
+
+```{r pernoc-madrid-2}
+ggplot(df_pernoc_madrid) + 
+  geom_line(aes(x = periodo, y = pernoctaciones)) + 
+  facet_wrap(~origen, scales = "free_y") + 
+  labs(x = "", y = "Pernoctaciones")
+```
+
+### Canarias
+
+Total de pernoctaciones en Canarias según continente de origen:
+
+```{r pernoc-canarias}
+df_pernoc_canarias <- calcula_pernoctaciones_por_origen("Canarias")
+
+head(df_pernoc_canarias)
+```
+
+```{r pernoc-canarias-por-cont}
+df_pernoc_canarias %>% 
+  filter(origen != "Total") %>% 
+  group_by(origen) %>% 
+  summarise(pernoctaciones = sum(pernoctaciones)) %>% 
+  mutate(pct_pernoc = pernoctaciones / sum(pernoctaciones), 
+         pct_pernoc = scales::percent(pct_pernoc, decimal.mark = ",")) %>% 
+  arrange(desc(pernoctaciones)) %>% 
+  knitr::kable(
+    col.names = c("Origen", "Pernoctaciones", "%"), 
+    format.args = list(big.mark = ".")
+  )
+```
+
+Flipo con el pico de africanos en 2021. Y los asiáticos son los que ahora están dándolo todo allí. 
+
+```{r pernoc-canarias-2}
+ggplot(df_pernoc_canarias) + 
+  geom_line(aes(x = periodo, y = pernoctaciones)) + 
+  facet_wrap(~origen, scales = "free_y") + 
+  labs(x = "", y = "Pernoctaciones")
+```
