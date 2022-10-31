@@ -1,0 +1,435 @@
+---
+title: "Bicimad open data"
+author: "Leonardo Hansa"
+output: 
+    revealjs::revealjs_presentation:
+        theme: "simple"
+        highlight: "default"
+        incremental: TRUE
+        transition: "none"
+---
+
+# Introduction
+
+```{r init, include=FALSE}
+library(tidyverse)
+library(glue)
+library(leaflet)
+```
+
+## What is Bicimad?
+
+- Bicimad is the public service of electric bicyles at Madrid. 
+- The [data](http://opendata.emtmadrid.es/Datos-estaticos/Datos-generales-(1)) about use of these bikes was made public a few months ago.
+- It consists on around 2,000 electric bikes parked at several stations. 
+- The cost depends on how long the user cycles before parking again (50 cents per 30 minutes).
+- The stations are not only in the historical center, but there are no stations on the outskirts of the city.
+
+## The origin of the data
+
+The files include anonymized data about every route a Bicimad bike has made.
+
+![](img/pantalla-descarga-datos.PNG)
+
+## Dealing with the data
+
+- The data consist on one compressed json file per month
+- In the future, a web scraping process (Selenium) can be prepared for the downloads.
+- For now:
+    1. We downloaded the data,
+    2. uncompressed the files 
+    3. and read the json files with R
+
+
+## The data that we used
+
+- Zip code of the cycler
+- Time spent with the bike per route
+- Geoinformation about the route (geojson format)
+    + Origin station (codified)
+    + Arrival station (codified)
+    + Coordinates (points, not lines)
+    
+**Remark.** All the codes used are storaged [here](https://github.com/lhansa/bicimad). 
+
+# Zip codes
+
+```{r mes-id-zipcodes, include=FALSE}
+mes_id <- "201808"
+```
+
+## First comments 
+
+- **Idea.** We would like to understand relations time cycling and where the user lives. Do people living outside the center cycle longer than people living in the outskirts? 
+    + This would be related about the idea of the bikes replacing public transport or walking.
+- We have restricted the analysis to people with a validated zip code from the region of Madrid (about half of the total data: 135.000 routes on August 2018).
+- The only routes taken into account are the ones done by users, not workers.
+
+## Some remarks
+
+- Cyclers from zip codes with more than 1,000 routes in one month have cycled 90% of all of the routes.
+- We have disregarded the zip codes with less than 1,000 routes, so that atypical behaviours due to small sampling are avoided.
+- All the zip codes with more than 1,000 routes associated are inside the city of Madrid.
+
+```{r lectura-df-tiempos, include=FALSE}
+df_tiempos <- read_rds(glue("data/df-tiempos_{mes_id}.rds"))
+```
+
+## About the next graphic
+
+- We'll see the distribution of the median time spent on the bike, by zip code where the cycler lives. 
+- We want to see who makes longer trips. 
+- The color depends on the number of routes taken by the cyclers from that zip code.
+
+## Median time on bike per Zip Code
+
+```{r tiempo-zip-code, include=FALSE}
+q1 <- function(x) quantile(x, probs = 0.25, na.rm = TRUE)
+q3 <- function(x) quantile(x, probs = 0.75, na.rm = TRUE)
+
+df_zipcode_tiempos <- df_tiempos %>% 
+  filter(
+    str_detect(zip_code, "^28"),
+    !zip_code %in% c("28", "28000"), 
+    str_length(zip_code) == 5
+  ) %>% 
+  mutate(tiempo = tiempo / 60) %>% 
+  group_by(zip_code) %>% 
+  summarise(
+    min = min(tiempo), 
+    q1 = q1(tiempo), 
+    media = mean(tiempo), 
+    mediana = median(tiempo), 
+    q3 = q3(tiempo), 
+    max = max(tiempo), 
+    movimientos = n()
+  ) 
+```
+
+
+```{r median-time-per-zc-plot, echo=FALSE}
+df_zipcode_tiempos %>% 
+  filter(movimientos > 1000) %>% 
+  arrange(mediana) %>% 
+  mutate(zip_code = as_factor(zip_code)) %>% 
+  ggplot(aes(x = zip_code)) + 
+  geom_col(aes(y = mediana, fill = movimientos)) + 
+  # geom_errorbar(aes(ymin = q1, ymax = q3)) +
+  coord_flip() + 
+  theme(axis.text.y = element_text(size = 8))
+```
+
+## A few insights 
+
+- Cyclers from outside the center spent more time on the bikes. 
+    + This may be the related to the fact that they use the service for going to neighbourhoods different from theirs. 
+- We should bear in mind that, for people living in the center of the city, there is no need on going to the outskirts. 
+- People from central zip codes seem to be using the bikes more times than people from other zip codes (28012, 28005, 28015, 28004) 
+
+## Another point of view
+
+- The data includes an ID for user and day. 
+- We will focus on the relation between the time a user cycles in one day (not in one route) and his or her zip code. 
+- We have exluded zip codes with less than 100 users (5% of the total daily users).
+
+## Median time on bike per day and Zip Code
+
+```{r median-time-day-data, include=FALSE}
+df_mediana_usuarios <- df_tiempos %>% 
+  filter(
+    str_detect(zip_code, "^28"),
+    !zip_code %in% c("28", "28000"), 
+    str_length(zip_code) == 5
+  ) %>% 
+  mutate(tiempo = tiempo / 60) %>% 
+  group_by(zip_code, user_id) %>% 
+  summarise(tiempo = sum(tiempo)) %>% 
+  summarise(
+    min = min(tiempo), 
+    q1 = q1(tiempo), 
+    media = mean(tiempo), 
+    mediana = median(tiempo), 
+    q3 = q3(tiempo), 
+    max = max(tiempo), 
+    usuarios = n()
+  ) %>% 
+  arrange(desc(mediana))
+```
+
+```{r median-time-day-plot, echo=FALSE}
+df_mediana_usuarios %>% 
+  filter(usuarios >= 100) %>%
+  arrange(mediana) %>% 
+  mutate(zip_code = as_factor(zip_code)) %>% 
+  ggplot() + 
+  geom_col(aes(x = zip_code, y = mediana, fill = usuarios)) + 
+  coord_flip()
+```
+
+## Some insights
+
+- Again, users from outside the center will use the bike more time. 
+- In median, people cycle between 15 and 20 minutes per day:
+    + Use not associated with long distances.
+- There are more users in the center, which is where the majority of the stations are found. 
+    + But correlation does not mean causation, so we don't know if expanding the service will imply an increasing in the number of users.
+
+
+# Routes visualization
+
+## First comments
+
+- **General idea.** Distribution of the routes on a map. The target is spotting cycling patterns.
+- We use routes taken both by workers (blue) and users (red).
+- The visualizations are made by weekday.
+- We will focus on two particular months.
+
+
+```{r func-pinta-mapa, include=FALSE}
+pinta_mapa <- function(fecha_guay){
+  coordenadas %>% 
+    filter(weekday == fecha_guay) %>% 
+    mutate(hora = as.character(hora)) %>% 
+    leaflet() %>% 
+    setView(lng = -3.695, lat = 40.425, zoom = 13) %>%
+    addTiles(options = providerTileOptions(opacity = 0.35)) %>% 
+    addCircleMarkers(
+      lng = ~long, lat = ~lat, 
+      color = ~color, stroke = FALSE, 
+      fillOpacity = ~tiempo, 
+      radius = 2, popup = ~hora) %>% 
+    addGraticule(style = list(weight = 0))
+}
+```
+
+# Maps. A first example
+
+```{r params-map-1, include=FALSE}
+numero_rutas <- 10000
+formato_numero_rutas <- formatC(numero_rutas, format = "f", digits = 0)
+mes_id <- "201808"
+```
+
+## Maps
+
+Month: `r mes_id`
+
+- Last month with available data
+- Holidays
+- Hot weather. Sunlight hours
+
+```{r lectura-coordenadas-1, include=FALSE}
+coordenadas <- read_rds(glue("data/coordenadas_{mes_id}_{formato_numero_rutas}-rutas.rds"))
+```
+
+## Weekday by weekday
+
+```{r wday1, include=FALSE}
+wd <- "lu."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-1, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-2, include=FALSE}
+wd <- "ma."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-2, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-3, include=FALSE}
+wd <- "mi."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-3, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-4, include=FALSE}
+wd <- "ju."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-4, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-5, include=FALSE}
+wd <- "vi."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-5, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-6, include=FALSE}
+wd <- "sá."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-6, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-7, include=FALSE}
+wd <- "do."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-7, echo=FALSE}
+pinta_mapa(wd)
+```
+
+
+# Maps. Another example
+
+```{r params-map-2, include=FALSE}
+numero_rutas <- 10000
+formato_numero_rutas <- formatC(numero_rutas, format = "f", digits = 0)
+mes_id <- "201805"
+```
+
+## Maps
+
+Month: `r mes_id`
+
+- Standard working month
+- Sunny weather. Not so hot
+
+```{r lectura-coordenadas-2, include=FALSE}
+coordenadas <- read_rds(glue("data/coordenadas_{mes_id}_{formato_numero_rutas}-rutas.rds"))
+```
+
+## Weekday by weekday
+
+```{r wday-1-b, include=FALSE}
+wd <- "lu."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-1-b, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-2-b, include=FALSE}
+wd <- "ma."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-2-b, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-3-b, include=FALSE}
+wd <- "mi."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-3-b, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-4-b, include=FALSE}
+wd <- "ju."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-4-b, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-5-b, include=FALSE}
+wd <- "vi."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-5-b, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-6-b, include=FALSE}
+wd <- "sá."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-6-b, echo=FALSE}
+pinta_mapa(wd)
+```
+
+## Weekday by weekday
+
+```{r wday-7-b, include=FALSE}
+wd <- "do."
+```
+
+Month: `r mes_id`. Weekday: `r wd`
+
+```{r pinta-mapa-7-b, echo=FALSE}
+pinta_mapa(wd)
+```
+
+# Next steps
+
+## Next steps
+
+- Scrape the website for automate the downloading of the data.
+- Use twelve months.
+- Study distributions per hours.
+- Separate annual users and sporadic users.  
+- Focus on routes taken by workers.
+- Identify strange routes.
+- Guess the location of each station id.
+- Analyse the data at a user-day level.
+
+## Next steps
+
+- Analyse the speed (are the cyclers using the electric mode or aren't?).
+- Explore the return trips on a same day for a same user.
+- Simplify the reading of geojson data.
+- Understand the relation between cycling and good/bad weather.
+- Study deviation of the data time, not only aggregated results.
+
+# Merci pour votre attention
+
