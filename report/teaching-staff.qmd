@@ -1,0 +1,40 @@
+---
+title: "Teaching staff"
+format: html
+---
+
+```{python}
+#| label: libs
+import pandas as pd
+```
+
+```{python}
+#| label: reading
+df_teach = pd.read_csv(
+    '../data/SYB65_323_202209_Teaching Staff in education.csv', 
+    skiprows=1
+)
+
+df_teach.head()
+```
+
+¿Qué series hay disponibles?
+
+```{python}
+#| label: series-av
+df_teach['Series'].unique() 
+```
+
+```{python}
+#| label: countries
+import re 
+[x for x in df_teach['Unnamed: 1'].unique() if re.search(r'^L', x)]
+```
+
+```{python}
+serie_de_trabajo = df_teach ['Series'].unique()[0]
+```
+
+
+
+
