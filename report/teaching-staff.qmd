@@ -3,36 +3,79 @@ title: "Teaching staff"
 format: html
 ---
 
+## Reading
 ```{python}
 #| label: libs
 import pandas as pd
+import re 
+import matplotlib.pyplot as plt
 ```
 
 ```{python}
 #| label: reading
 df_teach = pd.read_csv(
-    'https://data.un.org/_Docs/SYB/CSV/SYB65_323_202209_Teaching%20Staff%20in%20education.csv'
+    'https://data.un.org/_Docs/SYB/CSV/SYB65_323_202209_Teaching%20Staff%20in%20education.csv',
     skiprows=1
 )
 
 df_teach.head()
 ```
 
-¿Qué series hay disponibles?
-
+### Data available?
+What series are there?
 ```{python}
 #| label: series-av
 df_teach['Series'].unique() 
 ```
 
 ```{python}
-#| label: countries
-import re 
-[x for x in df_teach['Unnamed: 1'].unique() if re.search(r'^L', x)]
+#| label: rename
+df_teach = df_teach.rename(
+    columns={
+        'Region/Country/Area':'country_code',
+        'Unnamed: 1':'country_name'
+    })
+
+df_teach.columns = [x.lower() for x in df_teach.columns]
 ```
 
+
+
 ```{python}
-serie_de_trabajo = df_teach ['Series'].unique()[0]
+#| label: countries
+[x for x in df_teach['country_name'].unique() if re.search(r'^L', x)]
+```
+
+Elijo cosas con las que trabajaré.
+```{python}
+#| label: select
+countries_selected =  ['Spain', 'Ireland']
+serie_de_trabajo = df_teach ['series'].unique()[0]
+```
+
+## A first look
+```{python}
+#| label: filtering
+df_primary = df_teach.loc[
+    (df_teach['series'] == serie_de_trabajo) & (df_teach['country_name'].isin(countries_selected)), 
+    ['country_name', 'year', 'value']
+]
+
+df_primary.head()
+```
+
+
+The _Teachers at primary level_ series is in thousands.
+
+```{python}
+#| label: times-1000
+df_primary['value'] = df_primary['value'].astype(float) * 1000
+```
+
+### Plots
+
+```{python}
+df_primary
 ```
 
 
