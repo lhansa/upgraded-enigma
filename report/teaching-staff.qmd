@@ -11,7 +11,7 @@ import pandas as pd
 ```{python}
 #| label: reading
 df_teach = pd.read_csv(
-    '../data/SYB65_323_202209_Teaching Staff in education.csv', 
+    'https://data.un.org/_Docs/SYB/CSV/SYB65_323_202209_Teaching%20Staff%20in%20education.csv'
     skiprows=1
 )
 
