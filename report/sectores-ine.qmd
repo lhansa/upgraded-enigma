@@ -76,4 +76,28 @@ sns.lineplot(
 
 ```
 
+## Por provincias
 
+
+```{python}
+df_seleccion = (
+    df_sectores
+    .query('provincias in ("42 Soria", "21 Huelva", "28 Madrid", "02 Barcelona", "48 Bizkaia")')
+    .query('sector_economico.str.contains("Parados") == False')
+)
+```
+
+```{python}
+df_seleccion.head()
+```
+
+```{python}
+sns.relplot(
+    x='periodo', 
+    y='total', 
+    hue='sector_economico', 
+    col='provincias', 
+    col_wrap=2,
+    data=df_seleccion
+)
+```
