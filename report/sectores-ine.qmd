@@ -1,0 +1,103 @@
+---
+title: "Sectores INE"
+format: html
+---
+
+
+```{python}
+#| label: libs
+import pandas as pd
+import seaborn as sns
+```
+
+## Datos
+```{python}
+#| label: data
+df_sectores = pd.read_csv(
+    '../data/porcentaje-sector-provincia.csv',
+    sep=';', 
+    encoding='latin1')
+
+df_sectores.head()
+```
+
+### Arreglos
+
+Nombres de columnas.
+```{python}
+#| label: columnas
+df_sectores.columns = [x.lower().replace(' ', '_').replace('ó', 'o') for x in df_sectores.columns]
+```
+
+Tipos de columnas
+```{python}
+#| label: types
+df_sectores['total'] = pd.to_numeric(
+    df_sectores['total'].str.replace(',', '.'), 
+    errors='coerce'
+)
+```
+
+```{python}
+df_sectores.head()
+```
+
+#### Fechas
+
+```{python}
+df_sectores['periodo'] = pd.to_datetime(df_sectores['periodo'].str.replace('T', 'Q'))
+```
+
+## Total nacional
+
+```{python}
+df_nacional = (
+    df_sectores
+    .query('provincias == "Total Nacional"')
+)
+
+df_nacional.head()
+```
+
+```{python}
+df_nacional.loc[
+    df_nacional['sector_economico'].str.contains('Parados'), 
+    'sector_economico'
+] = 'Parados0'
+```
+
+```{python}
+sns.lineplot(
+    x='periodo', 
+    y='total', 
+    hue='sector_economico',
+    data=df_nacional
+)
+
+```
+
+## Por provincias
+
+
+```{python}
+df_seleccion = (
+    df_sectores
+    .query('provincias in ("42 Soria", "21 Huelva", "28 Madrid", "02 Barcelona", "48 Bizkaia")')
+    .query('sector_economico.str.contains("Parados") == False')
+)
+```
+
+```{python}
+df_seleccion.head()
+```
+
+```{python}
+sns.relplot(
+    x='periodo', 
+    y='total', 
+    hue='sector_economico', 
+    col='provincias', 
+    col_wrap=2,
+    data=df_seleccion
+)
+```
