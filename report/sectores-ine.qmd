@@ -36,10 +36,16 @@ df_sectores['total'] = pd.to_numeric(
     df_sectores['total'].str.replace(',', '.'), 
     errors='coerce'
 )
+df_sectores.head()
 ```
 
 ```{python}
-df_sectores.head()
+df_sectores.loc[
+    df_sectores['sector_economico'].str.contains('Parados'), 
+    'sector_economico'
+] = 'Parados0'
+
+set(df_sectores['sector_economico'])
 ```
 
 #### Fechas
@@ -57,13 +63,6 @@ df_nacional = (
 )
 
 df_nacional.head()
-```
-
-```{python}
-df_nacional.loc[
-    df_nacional['sector_economico'].str.contains('Parados'), 
-    'sector_economico'
-] = 'Parados0'
 ```
 
 ```{python}
@@ -85,9 +84,6 @@ df_seleccion = (
     .query('provincias in ("42 Soria", "21 Huelva", "28 Madrid", "02 Barcelona", "48 Bizkaia")')
     .query('sector_economico.str.contains("Parados") == False')
 )
-```
-
-```{python}
 df_seleccion.head()
 ```
 
@@ -98,6 +94,32 @@ sns.relplot(
     hue='sector_economico', 
     col='provincias', 
     col_wrap=2,
+    kind='line',
     data=df_seleccion
 )
 ```
+
+## Último año
+
+```{python}
+df_ultimo = (
+    df_sectores
+    .query('periodo == periodo.max()')
+    .drop('periodo', axis=1)
+    .pivot(
+        columns='sector_economico', 
+        index='provincias', 
+        values='total'
+    )
+)
+
+df_ultimo.head()
+```
+
+
+```{python}
+df_ultimo.plot(kind='bar', stacked=True)
+```
+
+
+
